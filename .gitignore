@@ -14,3 +14,7 @@ wheels/
 
 # Airflow logs
 logs/
+
+# Airflow configuration
+config/
+airflow.cfg
