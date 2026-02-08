@@ -1,96 +1,109 @@
-# Apache Airflow 3: The Complete Guide (2026)
+# Airflow 3 Reference
 
-This repository contains the source code for the **Apache Airflow 3 Full Course**. It demonstrates the transition from traditional task-based orchestration to modern, **Data-Centric Orchestration** using the Airflow 3 Task SDK.
+Technical notes and code samples for Airflow 3 features using `airflow.sdk` and the Asset model (AIP-60).
 
 ---
 
-## 🏗️ Evolution of Airflow
+## 🛠️ Task SDK Basics
 
-The essence of this tutorial is the shift from complex, boilerplate-heavy code to a clean, Pythonic developer experience.
-
-### 1. The Foundation: Task SDK
-Airflow 3 introduces the `airflow.sdk`, allowing you to define workflows using simple Python decorators.
+Airflow 3 simplifies workflow definition using pure Python decorators.
 
 ```python
 from airflow.sdk import dag, task
 
-@dag(dag_id="tutorial_basics")
-def tutorial_basics():
+@dag(dag_id="example_basics")
+def example_basics():
     @task.python
     def extract():
-        return {"data": [10, 20, 30]}
+        return {"data": [1, 2, 3]}
 
     @task.python
     def process(input_data):
         return [x * 2 for x in input_data["data"]]
 
-    # Seamless data passing (Automatic XComs)
     process(extract())
 
-tutorial_basics()
+example_basics()
 ```
 
-### 2. Advanced Workflow Patterns
-The tutorial covers how to handle complex dependencies, including **Parallelism (Fan-out/Fan-in)** and **Conditional Branching**.
+### Automatic XComs
+Returning values from a `@task` and passing them as arguments to another task automatically handles XCom orchestration.
 
-#### Parallel Execution Flow
+---
+
+## 🚦 Workflow Control
+
+### Parallel Execution (Fan-out/Fan-in)
 ```mermaid
 graph TD
-    Start[Extract Task] --> API[Transform API]
-    Start --> DB[Transform DB]
-    Start --> S3[Transform S3]
-    API --> Final[Aggregate & Load]
-    DB --> Final
-    S3 --> Final
+    Start[Extract] --> T1[Transform API]
+    Start --> T2[Transform DB]
+    T1 --> Final[Load]
+    T2 --> Final
 ```
 
-#### Branching Logic
-Using the `@task.branch` decorator to skip tasks based on runtime conditions (e.g., Weekend vs. Weekday).
+### Conditional Branching
+Using `@task.branch` for runtime logic.
 
 ```python
 @task.branch
-def decider(weekend_flag):
-    return "no_load_task" if weekend_flag == "true" else "load_data"
+def decider(condition):
+    if condition:
+        return "task_a"
+    return "task_b"
 ```
-
-### 3. Mastering the Timeline
-The course explains how Airflow handles time through the Scheduler. It moves beyond simple Cron expressions to **Delta Timetables** and **Incremental Loads**.
-
-- **Incremental Load Essence**: Using `data_interval_start` and `data_interval_end` to ensure **Idempotency**.
-- **Contiguous Windows**: Ensuring no data is lost or duplicated between consecutive runs.
 
 ---
 
-## 💎 The New Era: Declarative Assets (AIP-60)
+## 📅 Scheduling & Time
 
-The "Final Boss" of the tutorial is the **Asset Model**. Instead of scheduling a "DAG," you define a "Data Asset" that self-updates.
-
-### Why Assets?
-- **Self-Registering**: No need to explicitly call the DAG.
-- **Event-Driven**: Tasks trigger automatically when their dependent data is updated.
+### Incremental Loads
+Use `data_interval_start` and `data_interval_end` context variables for contiguous, idempotent data windows.
 
 ```python
-@asset(schedule="@daily", name="source_data")
-def fetch_data(self):
-    # Writes data to a physical location
-    ...
+@task.python
+def fetch(**kwargs):
+    start = kwargs['data_interval_start']
+    end = kwargs['data_interval_end']
+    # Logic based on time window
+```
 
-@asset(schedule=source_data) # Triggers ONLY when source_data is ready
-def process_data(self):
-    # Logic to process the above asset
+### Timetables
+- **Cron Expressions**: `schedule="0 0 * * *"`
+- **Delta Intervals**: `DeltaDataIntervalTimetable(duration(days=3))`
+
+---
+
+## 📦 Assets (AIP-60)
+
+A declarative approach focusing on data state rather than task timers.
+
+### Definition
+Assets are self-registering and don't require explicit calls.
+
+```python
+@asset(schedule="@daily", name="my_data")
+def update_data(self):
     ...
 ```
 
-### Data-Aware Dependency Flow
+### Data-Aware Dependencies
+Assets trigger automatically when their linked dependencies are updated.
+
 ```mermaid
 graph LR
-    Source[(@daily) Source Asset] -- "Update Event" --> Dependent[(Dependent Asset)]
-    Dependent -- "Downstream Signal" --> Analytics[BI / Analytics Tool]
+    A["Asset A (@daily)"] -- "On Update" --> B["Asset B (follows A)"]
+```
+
+```python
+@asset(schedule=asset_a) # Triggers on asset_a update
+def update_b(self):
+    ...
 ```
 
 ---
 
-## 🚀 Key Takeaways from the Tutorial
-1. **Developer Experience**: Write pure Python; let `airflow.sdk` handle the orchestration.
-2. **Data Integrity**: Use `data_interval` variables for precise, retry-safe incremental loads.
-3. **Future-Proofing**: Move towards **Assets** for a decoupled, scalable data architecture.
+## 📋 Core Principles
+1. **Idempotency**: Runs should be repeatable with the same output for a given time window.
+2. **Declarative**: Use Assets to decouple data production from consumption.
+3. **SDK First**: Leverage `airflow.sdk` for modern Python developer experience.
